@@ -1,74 +1,81 @@
 # ZED Voice AI
 
-ZED Voice AI is an experimental, private-input voice-cloning workflow using
-[k2-fsa/OmniVoice](https://github.com/k2-fsa/OmniVoice).
+Aplikasi web privat untuk membuat narasi suara menggunakan model [OmniVoice](https://github.com/k2-fsa/OmniVoice).
 
-## Architecture
+## Arsitektur
 
-- This repository contains public source code and the GitHub Actions workflow.
-- Reference recordings, scripts, transcripts, and generated audio belong in a
-  **private Cloudflare R2 bucket**, never in this public repository.
-- GitHub Actions downloads one job's private input, runs OmniVoice on a CPU
-  runner, and uploads the WAV output and status back to R2.
-- The workflow accepts only an opaque job ID. It does not put audio URLs,
-  signed URLs, transcripts, or scripts into the public Actions event payload.
+- Antarmuka web statis disajikan oleh Cloudflare Worker.
+- Worker menerima rekaman WAV dan naskah, lalu menyimpannya ke bucket R2 privat.
+- Worker memicu GitHub Actions dengan job ID acak (tanpa mengirim teks atau audio ke GitHub).
+- GitHub Actions menjalankan OmniVoice pada CPU dan mengunggah hasil WAV ke R2.
+- Worker menampilkan status dan mengalirkan hasil audio ke pengguna yang sudah login.
 
-## Required GitHub Actions secrets
+Audio, naskah, transkrip, dan hasil suara tidak boleh dimasukkan ke repository publik.
 
-In **Settings → Secrets and variables → Actions**, add:
+## Yang sudah ada di repository
 
-| Secret | Value |
+- `public/index.html` — aplikasi web responsif, rekam mikrofon, upload WAV, input naskah, status, pemutar dan unduh audio.
+- `worker/index.js` — API privat untuk upload, dispatch workflow, status, dan download.
+- `wrangler.toml` — konfigurasi Cloudflare Worker dan binding bucket R2.
+- `.github/workflows/omnivoice.yml` — runner pemrosesan.
+- `scripts/run_omnivoice.py` — inferensi OmniVoice dan penyimpanan hasil.
+
+## 1. GitHub Actions secrets
+
+Di repository GitHub, buka **Settings → Secrets and variables → Actions** dan buat:
+
+| Secret | Nilai |
 |---|---|
-| `R2_ACCOUNT_ID` | Cloudflare account ID |
-| `R2_BUCKET` | Private R2 bucket name |
-| `R2_ACCESS_KEY_ID` | R2 access key with access only to this bucket |
-| `R2_SECRET_ACCESS_KEY` | Matching R2 secret |
+| `R2_ACCOUNT_ID` | Cloudflare Account ID |
+| `R2_BUCKET` | Nama bucket privat, misalnya `zed-voice-private` |
+| `R2_ACCESS_KEY_ID` | R2 Access Key ID |
+| `R2_SECRET_ACCESS_KEY` | R2 Secret Access Key |
 
-Keep the bucket private. Do not enable public bucket access.
+Token R2 harus dibatasi pada bucket ini dengan izin Object Read & Write.
 
-## Private job object format
+## 2. GitHub token untuk Worker
 
-For a job ID such as `job_2026_001`, upload these objects to the bucket:
+Buat GitHub Fine-grained Personal Access Token:
+- Resource owner: akun pemilik repository.
+- Repository access: Only select repositories → `zed-voice-ai`.
+- Repository permissions: **Actions → Read and write**.
 
-- `jobs/job_2026_001/input.json`
-- `jobs/job_2026_001/reference.wav`
+Simpan token tersebut sebagai Worker secret bernama `GITHUB_TOKEN`. Jangan masukkan token ke kode, repository, atau chat.
 
-Example `input.json`:
+## 3. Deploy ke Cloudflare Workers
 
-```json
-{
-  "text": "Teks bahasa Indonesia yang ingin dibacakan.",
-  "ref_text": "Transkrip yang sesuai dengan rekaman suara referensi."
-}
-```
+1. Buka Cloudflare Dashboard → **Workers & Pages**.
+2. Pilih **Create application** → **Workers** → **Import a repository**.
+3. Hubungkan GitHub dan pilih `mkhoirulzed-svg/zed-voice-ai`.
+4. Atur build command menjadi `npx wrangler deploy`. Root directory gunakan root repository.
+5. Deploy Worker.
+6. Pada Worker → **Settings → Variables and Secrets**, tambahkan dua secret:
+   - `GITHUB_TOKEN` — Fine-grained token dari langkah 2.
+   - `APP_PASSWORD` — kata sandi kuat untuk membuka aplikasi.
+7. Pastikan konfigurasi R2 binding `VOICE_BUCKET` mengarah ke bucket `zed-voice-private`. Konfigurasi ini sudah didefinisikan di `wrangler.toml`.
+8. Setelah secret ditambahkan, lakukan redeploy bila diminta.
 
-Use a clean reference recording, ideally 3–10 seconds. The transcript must
-match the recording. WAV is the expected reference format in this first version.
+Worker menggunakan R2 binding langsung; API token R2 tidak perlu ditambahkan ke Worker. API token R2 tetap digunakan oleh GitHub Actions runner melalui GitHub Secrets.
 
-## Run the workflow
+## 4. Penggunaan
 
-1. Open **Actions → ZED Voice AI - OmniVoice**.
-2. Select **Run workflow**.
-3. Enter the opaque job ID only.
-4. After the run completes, retrieve:
-   - `jobs/<job_id>/output.wav`
-   - `jobs/<job_id>/status.json`
+1. Buka URL Worker.
+2. Masuk menggunakan `APP_PASSWORD`.
+3. Rekam suara sendiri melalui mikrofon atau unggah WAV (maksimum 20 MB).
+4. Masukkan naskah (maksimum 5.000 karakter).
+5. Opsional: masukkan transkrip yang sama persis dengan rekaman referensi.
+6. Klik **Generate suara**. Tunggu proses selesai, lalu dengarkan atau unduh WAV.
 
-The repository currently provides the processing worker. A secure upload page
-and job-dispatch backend are the next development step; do not put private
-audio or signed URLs into GitHub issues, commits, workflow inputs, or logs.
+Rekaman referensi idealnya 3–10 detik, jelas, tanpa musik latar, dan menggunakan suara milik sendiri atau suara yang penggunaannya telah mendapat izin.
 
-## Runtime and limitations
+## Batasan saat ini
 
-- The first run downloads the OmniVoice model and may take several minutes.
-- This workflow uses CPU inference; generation can be slow and may time out.
-- Standard GitHub-hosted runners do not provide a GPU.
-- Keep job IDs unguessable and delete input/output objects when no longer needed.
-- Use only recordings you own or have explicit permission to clone.
+- Runner GitHub Actions menggunakan CPU, bukan GPU. Generasi dapat berjalan lambat; timeout workflow saat ini 45 menit.
+- Model diunduh saat runner pertama kali berjalan.
+- Aplikasi menunggu hasil melalui polling. Jika halaman ditutup, pekerjaan tetap berjalan dan status dapat diperiksa lagi setelah membuka aplikasi (fitur riwayat job belum dibuat).
+- Versi awal menerima file WAV. Format lain perlu dikonversi ke WAV sebelum diunggah.
+- Belum ada multi-user, kuota, maupun penghapusan otomatis objek lama. Lindungi URL Worker dan jangan membagikan kata sandi aplikasi.
 
-## Model licensing
+## Lisensi
 
-OmniVoice model weights and related assets have their own license terms. Review
-the current [upstream repository](https://github.com/k2-fsa/OmniVoice) and model
-card before commercial use. This project does not grant rights to the model or
-to any voice recording.
+Periksa lisensi model dan bobot OmniVoice dari upstream sebelum penggunaan komersial. Gunakan hanya rekaman suara yang kamu miliki atau yang telah memberikan persetujuan eksplisit.
