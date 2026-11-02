@@ -54,6 +54,8 @@ try:
         if len(ref_text) > 1000:
             raise ValueError("Reference transcript is too long.")
 
+        upload_json("status.json", {"status": "processing"})
+
         # CPU runner: use float32 for broad compatibility.
         model = OmniVoice.from_pretrained(
             "k2-fsa/OmniVoice",
