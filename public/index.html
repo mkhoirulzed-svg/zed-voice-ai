@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#0b1220">
+  <title>ZED Voice AI</title>
+  <style>
+    :root{color-scheme:dark;--bg:#0b1220;--panel:#121d30;--line:#26364d;--muted:#9aabc2;--accent:#38bdf8;--green:#34d399}
+    *{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at top,#14243a 0,#0b1220 55%);color:#edf5ff;font:15px/1.5 system-ui,-apple-system,Segoe UI,sans-serif;min-height:100vh}
+    main{width:min(760px,100%);margin:auto;padding:28px 18px 48px}.brand{display:flex;align-items:center;gap:12px;margin-bottom:26px}.logo{width:44px;height:44px;border-radius:14px;background:linear-gradient(135deg,#38bdf8,#2563eb);display:grid;place-items:center;font-weight:900;color:#061321;font-size:20px}.brand h1{font-size:20px;margin:0}.brand p{margin:2px 0 0;color:var(--muted);font-size:13px}
+    .panel{background:rgba(18,29,48,.94);border:1px solid var(--line);border-radius:18px;padding:20px;margin:14px 0;box-shadow:0 14px 45px #0002}.eyebrow{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);font-weight:700}.panel h2{font-size:18px;margin:5px 0 14px}.muted{color:var(--muted);font-size:13px}
+    label{display:block;font-weight:650;margin:14px 0 7px}input,textarea{width:100%;border:1px solid #344760;background:#0b1525;color:#f3f8ff;border-radius:11px;padding:12px 13px;font:inherit;outline:none}textarea{min-height:150px;resize:vertical}input:focus,textarea:focus{border-color:var(--accent)}input[type=file]{padding:10px}
+    button{border:0;border-radius:11px;padding:12px 16px;font:700 14px system-ui;cursor:pointer}.primary{background:linear-gradient(100deg,#38bdf8,#60a5fa);color:#061321}.secondary{background:#22334a;color:#e8f2ff;border:1px solid #3b506b}.danger{background:#4a2630;color:#ffdce2;border:1px solid #79404d}.actions{display:flex;gap:9px;flex-wrap:wrap;margin-top:13px}.actions button{flex:1}.hidden{display:none!important}
+    .record-state{margin-top:10px;color:var(--muted);font-size:13px}.status{padding:13px;border-radius:12px;background:#0b1525;border:1px solid var(--line);margin-top:16px}.status strong{display:block;margin-bottom:3px}.progress{height:6px;background:#25364b;border-radius:9px;overflow:hidden;margin-top:10px}.progress span{display:block;height:100%;width:30%;background:var(--accent);animation:move 1.4s ease-in-out infinite alternate}@keyframes move{to{transform:translateX(210%)}}audio{width:100%;margin-top:12px}.hint{border-left:3px solid #38bdf8;padding:9px 12px;background:#102238;border-radius:0 9px 9px 0;margin-top:12px;font-size:13px;color:#bfd4e9}
+    footer{text-align:center;color:#71839c;font-size:12px;margin-top:24px}.login{max-width:430px;margin:10vh auto}.login button{width:100%;margin-top:12px}
+    @media(max-width:520px){main{padding:20px 13px 36px}.panel{padding:16px}.actions{flex-direction:column}.actions button{width:100%}}
+  </style>
+</head>
+<body>
+<main>
+  <header class="brand"><div class="logo">Z</div><div><h1>ZED Voice AI</h1><p>Ubah naskah menjadi suara dengan model OmniVoice</p></div></header>
+  <section id="login" class="panel login">
+    <div class="eyebrow">Akses pribadi</div><h2>Masuk ke ZED Voice AI</h2>
+    <p class="muted">Masukkan kata sandi aplikasi yang disiapkan di Cloudflare Worker.</p>
+    <input id="password" type="password" autocomplete="current-password" placeholder="Kata sandi aplikasi">
+    <button id="loginBtn" class="primary">Masuk</button><p id="loginError" class="muted"></p>
+  </section>
+  <section id="app" class="hidden">
+    <section class="panel">
+      <div class="eyebrow">01 · Referensi suara</div><h2>Gunakan suara sendiri</h2>
+      <p class="muted">Rekam contoh suara 3–10 detik, atau unggah file WAV. Gunakan rekaman milik sendiri atau yang sudah mendapat izin.</p>
+      <div class="actions"><button id="recordBtn" class="secondary">● Mulai rekam</button><button id="stopBtn" class="danger" disabled>■ Berhenti</button></div>
+      <p id="recordState" class="record-state">Belum ada rekaman.</p>
+      <label for="audioFile">Atau pilih file WAV</label><input id="audioFile" type="file" accept=".wav,audio/wav">
+      <audio id="referencePreview" controls class="hidden"></audio>
+      <label for="refText">Kalimat yang diucapkan dalam rekaman (opsional)</label>
+      <textarea id="refText" rows="2" placeholder="Tuliskan persis kalimat yang terdengar pada rekaman..."></textarea>
+    </section>
+    <section class="panel">
+      <div class="eyebrow">02 · Naskah</div><h2>Teks yang akan dibacakan</h2>
+      <textarea id="script" maxlength="5000" placeholder="Tempel naskah narasi kamu di sini..."></textarea>
+      <p class="muted"><span id="charCount">0</span>/5000 karakter</p>
+      <button id="generateBtn" class="primary" style="width:100%">Generate suara</button>
+      <div id="status" class="status hidden" aria-live="polite"><strong id="statusTitle">Menyiapkan...</strong><span id="statusDetail" class="muted"></span><div id="progress" class="progress"><span></span></div></div>
+      <div id="result" class="hidden"><label>Hasil suara</label><audio id="outputAudio" controls></audio><div class="actions"><a id="downloadLink" class="primary" style="text-align:center;text-decoration:none;padding:12px 16px;border-radius:11px;flex:1" download="zed-voice-output.wav">Unduh audio WAV</a><button id="newBtn" class="secondary">Buat suara baru</button></div></div>
+    </section>
+    <p class="muted" style="text-align:center"><button id="logoutBtn" class="secondary">Keluar</button></p>
+  </section>
+  <footer>ZED Voice AI · Audio referensi dan hasil disimpan di penyimpanan privat.</footer>
+</main>
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  let appPassword = "";
+  let recordedBlob = null, mediaStream = null, audioContext = null, processor = null, source = null, chunks = [], busy = false;
+  const show = (id, yes=true) => $(id).classList.toggle("hidden", !yes);
+  function authHeaders(){ return {"Authorization":"Bearer "+appPassword}; }
+  $("loginBtn").onclick = async () => {
+    appPassword = $("password").value;
+    if(!appPassword) return;
+    try {
+      const r = await fetch("/api/health",{headers:authHeaders()});
+      if(!r.ok) throw new Error("Kata sandi tidak sesuai.");
+      show("login",false); show("app",true); $("loginError").textContent="";
+    } catch(e){ appPassword=""; $("loginError").textContent=e.message; }
+  };
+  $("password").addEventListener("keydown",e=>{if(e.key==="Enter")$("loginBtn").click()});
+  $("logoutBtn").onclick=()=>{appPassword="";$("password").value="";show("app",false);show("login",true)};
+  $("script").addEventListener("input",()=> $("charCount").textContent=$("script").value.length);
+  function wavBlob(buffers, sampleRate){
+    const length=buffers.reduce((n,b)=>n+b.length,0), pcm=new Float32Array(length);let offset=0;
+    for(const b of buffers){pcm.set(b,offset);offset+=b.length}
+    const bytes=new ArrayBuffer(44+pcm.length*2),v=new DataView(bytes);
+    const write=(p,s)=>{for(let i=0;i<s.length;i++)v.setUint8(p+i,s.charCodeAt(i))};
+    write(0,"RIFF");v.setUint32(4,36+pcm.length*2,true);write(8,"WAVE");write(12,"fmt ");v.setUint32(16,16,true);v.setUint16(20,1,true);v.setUint16(22,1,true);v.setUint32(24,sampleRate,true);v.setUint32(28,sampleRate*2,true);v.setUint16(32,2,true);v.setUint16(34,16,true);write(36,"data");v.setUint32(40,pcm.length*2,true);
+    let pos=44;for(let i=0;i<pcm.length;i++){const s=Math.max(-1,Math.min(1,pcm[i]));v.setInt16(pos,s<0?s*0x8000:s*0x7fff,true);pos+=2}
+    return new Blob([bytes],{type:"audio/wav"});
+  }
+  $("recordBtn").onclick=async()=>{
+    try{
+      mediaStream=await navigator.mediaDevices.getUserMedia({audio:{channelCount:1,echoCancellation:true,noiseSuppression:true}});
+      audioContext=new (window.AudioContext||window.webkitAudioContext)();source=audioContext.createMediaStreamSource(mediaStream);processor=audioContext.createScriptProcessor(4096,1,1);chunks=[];
+      processor.onaudioprocess=e=>chunks.push(new Float32Array(e.inputBuffer.getChannelData(0)));
+      source.connect(processor);processor.connect(audioContext.destination);
+      $("recordState").textContent="Sedang merekam...";$("recordBtn").disabled=true;$("stopBtn").disabled=false;
+    }catch(e){$("recordState").textContent="Mikrofon tidak dapat diakses: "+e.message}
+  };
+  $("stopBtn").onclick=async()=>{
+    if(!audioContext)return;
+    processor.disconnect();source.disconnect();mediaStream.getTracks().forEach(t=>t.stop());
+    recordedBlob=wavBlob(chunks,audioContext.sampleRate);await audioContext.close();audioContext=null;
+    $("audioFile").value="";$("recordState").textContent="Rekaman siap · "+(recordedBlob.size/1024).toFixed(0)+" KB";
+    $("referencePreview").src=URL.createObjectURL(recordedBlob);show("referencePreview");$("recordBtn").disabled=false;$("stopBtn").disabled=true;
+  };
+  $("audioFile").onchange=()=>{
+    const f=$("audioFile").files[0];if(!f)return;
+    if(!f.name.toLowerCase().endsWith(".wav")){alert("Pilih file WAV.");$("audioFile").value="";return}
+    recordedBlob=null;$("recordState").textContent="File dipilih: "+f.name;$("referencePreview").src=URL.createObjectURL(f);show("referencePreview");
+  };
+  async function request(path,options={}){return fetch(path,{...options,headers:{...authHeaders(),...(options.headers||{})}})}
+  $("generateBtn").onclick=async()=>{
+    if(busy)return;
+    const text=$("script").value.trim(),file=$("audioFile").files[0]||recordedBlob;
+    if(!file){alert("Rekam atau pilih file WAV referensi terlebih dahulu.");return}
+    if(!text){alert("Masukkan naskah terlebih dahulu.");return}
+    if(file.size>20*1024*1024){alert("Ukuran file maksimal 20 MB.");return}
+    busy=true;$("generateBtn").disabled=true;show("status");show("result",false);show("progress");
+    $("statusTitle").textContent="Mengirim pekerjaan...";$("statusDetail").textContent="Mengunggah rekaman dan naskah secara privat.";
+    try{
+      const fd=new FormData();fd.append("reference",file,"reference.wav");fd.append("text",text);fd.append("ref_text",$("refText").value.trim());
+      const start=await request("/api/jobs",{method:"POST",body:fd});const data=await start.json();if(!start.ok)throw new Error(data.error||"Gagal mengirim pekerjaan.");
+      $("statusTitle").textContent="Sedang membuat suara";$("statusDetail").textContent="Job ID: "+data.job_id+". Proses bisa memerlukan beberapa menit.";
+      let done=false;
+      for(let i=0;i<90;i++){
+        await new Promise(r=>setTimeout(r,5000));
+        const check=await request("/api/jobs/"+data.job_id);const state=await check.json();
+        if(!check.ok)throw new Error(state.error||"Gagal memeriksa status.");
+        if(state.status==="completed"){
+          const audio=await request("/api/jobs/"+data.job_id+"/audio");if(!audio.ok)throw new Error("Audio selesai tetapi gagal diambil.");
+          const blob=await audio.blob(),url=URL.createObjectURL(blob);$("outputAudio").src=url;$("downloadLink").href=url;
+          $("statusTitle").textContent="Selesai!";$("statusDetail").textContent="Suara berhasil dibuat.";show("progress",false);show("result");done=true;break;
+        }
+        if(state.status==="failed")throw new Error("Proses gagal: "+(state.error||"periksa log Actions."));
+        $("statusDetail").textContent=state.status==="queued"?"Menunggu runner GitHub Actions...":"Model sedang memproses suara...";
+      }
+      if(!done)throw new Error("Proses belum selesai setelah 7,5 menit. Periksa kembali status job nanti.");
+    }catch(e){$("statusTitle").textContent="Belum berhasil";$("statusDetail").textContent=e.message;show("progress",false)}
+    finally{busy=false;$("generateBtn").disabled=false}
+  };
+  $("newBtn").onclick=()=>{ $("script").value="";$("charCount").textContent="0";show("result",false);show("status",false); };
+})();
+</script>
+</body></html>
