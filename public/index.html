@@ -112,7 +112,7 @@
       const start=await request("/api/jobs",{method:"POST",body:fd});const data=await start.json();if(!start.ok)throw new Error(data.error||"Gagal mengirim pekerjaan.");
       $("statusTitle").textContent="Sedang membuat suara";$("statusDetail").textContent="Job ID: "+data.job_id+". Proses bisa memerlukan beberapa menit.";
       let done=false;
-      for(let i=0;i<90;i++){
+      for(let i=0;i<540;i++){
         await new Promise(r=>setTimeout(r,5000));
         const check=await request("/api/jobs/"+data.job_id);const state=await check.json();
         if(!check.ok)throw new Error(state.error||"Gagal memeriksa status.");
@@ -124,7 +124,7 @@
         if(state.status==="failed")throw new Error("Proses gagal: "+(state.error||"periksa log Actions."));
         $("statusDetail").textContent=state.status==="queued"?"Menunggu runner GitHub Actions...":"Model sedang memproses suara...";
       }
-      if(!done)throw new Error("Proses belum selesai setelah 7,5 menit. Periksa kembali status job nanti.");
+      if(!done)throw new Error("Proses belum selesai setelah 45 menit. Periksa status GitHub Actions untuk detailnya.");
     }catch(e){$("statusTitle").textContent="Belum berhasil";$("statusDetail").textContent=e.message;show("progress",false)}
     finally{busy=false;$("generateBtn").disabled=false}
   };
