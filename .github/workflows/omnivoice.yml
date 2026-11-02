@@ -29,8 +29,10 @@ jobs:
     steps:
       - name: Validate job ID
         shell: bash
+        env:
+          JOB_ID: ${{ inputs.job_id }}
         run: |
-          if [[ ! "${{ inputs.job_id }}" =~ ^[A-Za-z0-9_-]{8,80}$ ]]; then
+          if [[ ! "$JOB_ID" =~ ^[A-Za-z0-9_-]{8,80}$ ]]; then
             echo "Invalid job ID format."
             exit 1
           fi
@@ -54,4 +56,3 @@ jobs:
         env:
           JOB_ID: ${{ inputs.job_id }}
         run: python scripts/run_omnivoice.py
-
